@@ -1,17 +1,18 @@
 'use client'
 
-
 import React, { useState, useEffect } from "react";
 
 interface Todo {
   id: number;
   text: string;
   completed: boolean;
+  reminder?: string; // ISO string for datetime-local input
 }
 
 export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTodo, setNewTodo] = useState("");
+  const [newReminder, setNewReminder] = useState("");
 
   // Load todos from localStorage on mount
   useEffect(() => {
@@ -32,9 +33,11 @@ export default function Home() {
       id: Date.now(),
       text: newTodo.trim(),
       completed: false,
+      reminder: newReminder || undefined,
     };
     setTodos([todo, ...todos]);
     setNewTodo("");
+    setNewReminder("");
   };
 
   const toggleComplete = (id: number) => {
@@ -49,6 +52,14 @@ export default function Home() {
     setTodos(todos.filter((todo) => todo.id !== id));
   };
 
+  const updateReminder = (id: number, reminder: string) => {
+    setTodos(
+      todos.map((todo) =>
+        todo.id === id ? { ...todo, reminder } : todo
+      )
+    );
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       addTodo();
@@ -61,15 +72,25 @@ export default function Home() {
         Todo App
       </h1>
       <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <div className="flex gap-2 mb-6">
+        <div className="flex flex-col gap-2 mb-6">
           <input
             type="text"
             aria-label="Add new todo"
             placeholder="Add a new todo"
-            className="flex-grow rounded border border-gray-300 dark:border-gray-700 px-4 py-2 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            className="rounded border border-gray-300 dark:border-gray-700 px-4 py-2 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             value={newTodo}
             onChange={(e) => setNewTodo(e.target.value)}
             onKeyDown={handleKeyDown}
+          />
+          <input
+            type="datetime-local"
+            aria-label="Set reminder for new todo"
+            className="rounded border border-gray-300 dark:border-gray-700 px-4 py-2 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            value={newReminder}
+            onChange={(e) => setNewReminder(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addTodo();
+            }}
           />
           <button
             onClick={addTodo}
@@ -88,45 +109,57 @@ export default function Home() {
           {todos.map((todo) => (
             <li
               key={todo.id}
-              className="flex items-center justify-between bg-gray-100 dark:bg-gray-700 rounded px-4 py-2 transition hover:bg-gray-200 dark:hover:bg-gray-600"
+              className="flex flex-col gap-2 bg-gray-100 dark:bg-gray-700 rounded px-4 py-2 transition hover:bg-gray-200 dark:hover:bg-gray-600"
             >
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={todo.completed}
-                  onChange={() => toggleComplete(todo.id)}
-                  className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-                  aria-label={`Mark todo '${todo.text}' as completed`}
-                />
-                <span
-                  className={`${
-                    todo.completed ? "line-through text-gray-500 dark:text-gray-400" : "text-gray-900 dark:text-gray-100"
-                  } transition`}
-                >
-                  {todo.text}
-                </span>
-              </label>
-              <button
-                onClick={() => deleteTodo(todo.id)}
-                aria-label={`Delete todo '${todo.text}'`}
-                className="text-red-600 hover:text-red-800 transition"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={todo.completed}
+                    onChange={() => toggleComplete(todo.id)}
+                    className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                    aria-label={`Mark todo '${todo.text}' as completed`}
                   />
-                </svg>
-              </button>
+                  <span
+                    className={`${
+                      todo.completed ? "line-through text-gray-500 dark:text-gray-400" : "text-gray-900 dark:text-gray-100"
+                    } transition`}
+                  >
+                    {todo.text}
+                  </span>
+                </label>
+                <button
+                  onClick={() => deleteTodo(todo.id)}
+                  aria-label={`Delete todo '${todo.text}'`}
+                  className="text-red-600 hover:text-red-800 transition"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <input
+                type="datetime-local"
+                aria-label={`Set reminder for todo '${todo.text}'`}
+                className="rounded border border-gray-300 dark:border-gray-700 px-3 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                value={todo.reminder || ""}
+                onChange={(e) => updateReminder(todo.id, e.target.value)}
+              />
             </li>
           ))}
         </ul>
       </div>
+    </div>
+  );
+}
