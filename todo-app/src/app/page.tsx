@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 interface Todo {
   id: number;
@@ -13,6 +13,8 @@ export default function Home() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTodo, setNewTodo] = useState("");
   const [newReminder, setNewReminder] = useState("");
+  const [alerts, setAlerts] = useState<number[]>([]); // todo ids with active alerts
+  const notifiedRef = useRef<Set<number>>(new Set()); // track notified todos to avoid repeat notifications
 
   // Load todos from localStorage on mount
   useEffect(() => {
@@ -25,6 +27,49 @@ export default function Home() {
   // Save todos to localStorage on change
   useEffect(() => {
     localStorage.setItem("todos", JSON.stringify(todos));
+  }, [todos]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Check reminders every minute and show notifications
+  useEffect(() => {
+    const checkReminders = () => {
+      const now = new Date();
+      const alertIds = todos
+        .filter(todo => {
+          if (!todo.reminder || todo.completed) return false;
+          const reminderDate = new Date(todo.reminder);
+          return reminderDate <= now;
+        })
+        .map(todo => todo.id);
+
+      setAlerts(alertIds);
+
+      // Show notifications for new alerts
+      if ("Notification" in window && Notification.permission === "granted") {
+        alertIds.forEach(id => {
+          if (!notifiedRef.current.has(id)) {
+            const todo = todos.find(t => t.id === id);
+            if (todo) {
+              new Notification("Todo Reminder", {
+                body: todo.text,
+                tag: `todo-reminder-${id}`
+              });
+              notifiedRef.current.add(id);
+            }
+          }
+        });
+      }
+    };
+
+    checkReminders();
+    const interval = setInterval(checkReminders, 60000); // every 60 seconds
+    return () => clearInterval(interval);
   }, [todos]);
 
   const addTodo = () => {
@@ -46,10 +91,14 @@ export default function Home() {
         todo.id === id ? { ...todo, completed: !todo.completed } : todo
       )
     );
+    setAlerts((prev) => prev.filter(alertId => alertId !== id));
+    notifiedRef.current.delete(id);
   };
 
   const deleteTodo = (id: number) => {
     setTodos(todos.filter((todo) => todo.id !== id));
+    setAlerts((prev) => prev.filter(alertId => alertId !== id));
+    notifiedRef.current.delete(id);
   };
 
   const updateReminder = (id: number, reminder: string) => {
@@ -64,6 +113,11 @@ export default function Home() {
     if (e.key === "Enter") {
       addTodo();
     }
+  };
+
+  const dismissAlert = (id: number) => {
+    setAlerts((prev) => prev.filter(alertId => alertId !== id));
+    notifiedRef.current.delete(id);
   };
 
   return (
@@ -106,58 +160,75 @@ export default function Home() {
               No todos yet. Add one above!
             </li>
           )}
-          {todos.map((todo) => (
-            <li
-              key={todo.id}
-              className="flex flex-col gap-2 bg-gray-100 dark:bg-gray-700 rounded px-4 py-2 transition hover:bg-gray-200 dark:hover:bg-gray-600"
-            >
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={todo.completed}
-                    onChange={() => toggleComplete(todo.id)}
-                    className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-                    aria-label={`Mark todo '${todo.text}' as completed`}
-                  />
-                  <span
-                    className={`${
-                      todo.completed ? "line-through text-gray-500 dark:text-gray-400" : "text-gray-900 dark:text-gray-100"
-                    } transition`}
-                  >
-                    {todo.text}
-                  </span>
-                </label>
-                <button
-                  onClick={() => deleteTodo(todo.id)}
-                  aria-label={`Delete todo '${todo.text}'`}
-                  className="text-red-600 hover:text-red-800 transition"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 18L18 6M6 6l12 12"
+          {todos.map((todo) => {
+            const isAlert = alerts.includes(todo.id);
+            return (
+              <li
+                key={todo.id}
+                className={`flex flex-col gap-2 rounded px-4 py-2 transition hover:bg-gray-200 dark:hover:bg-gray-600 ${
+                  isAlert ? "bg-red-100 dark:bg-red-700" : "bg-gray-100 dark:bg-gray-700"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={todo.completed}
+                      onChange={() => toggleComplete(todo.id)}
+                      className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                      aria-label={`Mark todo '${todo.text}' as completed`}
                     />
-                  </svg>
-                </button>
-              </div>
-              <input
-                type="datetime-local"
-                aria-label={`Set reminder for todo '${todo.text}'`}
-                className="rounded border border-gray-300 dark:border-gray-700 px-3 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                value={todo.reminder || ""}
-                onChange={(e) => updateReminder(todo.id, e.target.value)}
-              />
-            </li>
-          ))}
+                    <span
+                      className={`${
+                        todo.completed ? "line-through text-gray-500 dark:text-gray-400" : "text-gray-900 dark:text-gray-100"
+                      } transition`}
+                    >
+                      {todo.text}
+                    </span>
+                  </label>
+                  <button
+                    onClick={() => deleteTodo(todo.id)}
+                    aria-label={`Delete todo '${todo.text}'`}
+                    className="text-red-600 hover:text-red-800 transition"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <input
+                  type="datetime-local"
+                  aria-label={`Set reminder for todo '${todo.text}'`}
+                  className="rounded border border-gray-300 dark:border-gray-700 px-3 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  value={todo.reminder || ""}
+                  onChange={(e) => updateReminder(todo.id, e.target.value)}
+                />
+                {isAlert && (
+                  <div className="flex items-center justify-between bg-red-200 dark:bg-red-800 rounded px-3 py-1 mt-1 text-red-900 dark:text-red-100">
+                    <span>Reminder reached!</span>
+                    <button
+                      onClick={() => dismissAlert(todo.id)}
+                      aria-label={`Dismiss reminder alert for todo '${todo.text}'`}
+                      className="font-bold hover:text-red-700 dark:hover:text-red-300"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>
